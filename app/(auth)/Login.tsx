@@ -1,7 +1,8 @@
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
+  Alert,
   Keyboard,
   Text,
   TouchableOpacity,
@@ -10,7 +11,36 @@ import {
 } from "react-native";
 import Button from "../../components/Button";
 import Input from "../../components/Input";
+import { supabase } from "../../services/supabase"; // <-- Sesuaikan path file supabase lu
+
 export default function Login() {
+  // Tambahkan state untuk form dan loading
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Fungsi untuk hit Supabase Auth
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Email dan Password tidak boleh kosong!");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Login Gagal", error.message);
+    } else {
+      // Jika berhasil, arahkan ke dashboard
+      router.replace("/tabs/dashboard");
+    }
+  };
+
   return (
     <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
       <View className="flex-1 justify-center px-5 bg-tertier">
@@ -32,16 +62,21 @@ export default function Login() {
             </Text>
           </View>
 
+          {/* Hubungkan value dan onChangeText ke state */}
           <Input
             label="Email"
             placeholder="posumkm@gmail.com"
             keyboardType="email-address"
             autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
           />
           <Input
             label="Password"
             placeholder="••••••••"
             secureTextEntry={true}
+            value={password}
+            onChangeText={setPassword}
           />
 
           <TouchableOpacity className="items-end mb-6 mt-1">
@@ -50,11 +85,17 @@ export default function Login() {
             </Text>
           </TouchableOpacity>
 
+          {/* Hubungkan onPress ke handleLogin dan tampilkan state loading */}
           <Button
-            title="Login"
+            title={loading ? "Memproses..." : "Login"}
             className="mb-6"
-            onPress={() => router.push("/tabs/dashboard")}
-            rightIcon={<Feather name="arrow-right" size={20} color="white" />}
+            onPress={handleLogin}
+            disabled={loading}
+            rightIcon={
+              !loading ? (
+                <Feather name="arrow-right" size={20} color="white" />
+              ) : undefined
+            }
           />
 
           <View className="flex-row justify-center items-center mb-6">

@@ -1,8 +1,8 @@
-// app/(auth)/regist.tsx
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -15,11 +15,71 @@ import {
 
 import Button from "../../components/Button";
 import Input from "../../components/Input";
+import { supabase } from "../../services/supabase"; // <-- Sesuaikan path file supabase lu
 
 export default function Register() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // State Step 1 (Business Info)
+  const [storeName, setStoreName] = useState("");
+  const [category, setCategory] = useState(""); // Bisa dibikin modal/dropdown nanti
+  const [address, setAddress] = useState("");
+
+  // State Step 2 (Admin Info)
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleNextStep = () => {
+    if (!storeName || !category || !address) {
+      Alert.alert(
+        "Perhatian",
+        "Harap lengkapi semua data bisnis terlebih dahulu.",
+      );
+      return;
+    }
+    setStep(2);
+  };
+
+  const handleRegister = async () => {
+    if (!fullName || !email || !password) {
+      Alert.alert("Perhatian", "Harap lengkapi data admin akun.");
+      return;
+    }
+    if (password.length < 8) {
+      Alert.alert("Perhatian", "Password harus minimal 8 karakter.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+      options: {
+        // Simpan data tambahan di metadata user
+        data: {
+          full_name: fullName,
+          store_name: storeName,
+          business_category: category,
+          business_address: address,
+        },
+      },
+    });
+    setLoading(false);
+
+    if (error) {
+      Alert.alert("Gagal Daftar", error.message);
+    } else {
+      Alert.alert(
+        "Pendaftaran Berhasil",
+        "Silakan periksa email Anda untuk verifikasi, atau langsung login jika email konfirmasi dimatikan.",
+        [{ text: "OK", onPress: () => router.back() }],
+      );
+    }
+  };
 
   return (
     <KeyboardAvoidingView
@@ -89,6 +149,8 @@ export default function Register() {
                 <Input
                   label="Store Name"
                   placeholder="e.g. Acme Supplies"
+                  value={storeName}
+                  onChangeText={setStoreName}
                   leftIcon={
                     <MaterialCommunityIcons
                       name="store"
@@ -97,9 +159,17 @@ export default function Register() {
                     />
                   }
                 />
+
+                {/* 
+                  NOTE: Untuk category lu set editable={false} di UI asli. 
+                  Untuk sekarang, gua biarin bisa diketik biasa biar fungsinya jalan.
+                  Nanti lu bisa ganti pakai modal/picker buatan lu sendiri.
+                */}
                 <Input
                   label="Business Category"
-                  placeholder="Select a category"
+                  placeholder="Retail, F&B, etc."
+                  value={category}
+                  onChangeText={setCategory}
                   leftIcon={
                     <MaterialCommunityIcons
                       name="shape-outline"
@@ -107,14 +177,12 @@ export default function Register() {
                       color="#9ca3af"
                     />
                   }
-                  rightIcon={
-                    <Feather name="chevron-down" size={20} color="#9ca3af" />
-                  }
-                  editable={false}
                 />
                 <Input
                   label="Business Address"
                   placeholder="Street address, city, state"
+                  value={address}
+                  onChangeText={setAddress}
                   leftIcon={
                     <MaterialCommunityIcons
                       name="map-marker-outline"
@@ -127,13 +195,14 @@ export default function Register() {
                 <Button
                   title="Next Step"
                   className="mt-4 mb-6"
-                  onPress={() => setStep(2)}
+                  onPress={handleNextStep}
                   rightIcon={
                     <Feather name="arrow-right" size={20} color="white" />
                   }
                 />
               </View>
             )}
+
             {step === 2 && (
               <View>
                 <View className="flex-row items-center mb-4">
@@ -150,6 +219,8 @@ export default function Register() {
                 <Input
                   label="Full Name"
                   placeholder="John Doe"
+                  value={fullName}
+                  onChangeText={setFullName}
                   leftIcon={<Feather name="user" size={20} color="#9ca3af" />}
                 />
                 <Input
@@ -157,6 +228,8 @@ export default function Register() {
                   placeholder="admin@example.com"
                   keyboardType="email-address"
                   autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
                   leftIcon={<Feather name="mail" size={20} color="#9ca3af" />}
                 />
                 <View className="mb-2">
@@ -164,6 +237,8 @@ export default function Register() {
                     label="Create Password"
                     placeholder="••••••••"
                     secureTextEntry={!showPassword}
+                    value={password}
+                    onChangeText={setPassword}
                     leftIcon={<Feather name="lock" size={20} color="#9ca3af" />}
                     rightIcon={
                       <Feather
@@ -183,6 +258,7 @@ export default function Register() {
                   {/* Tombol Back ke Step 1 */}
                   <TouchableOpacity
                     onPress={() => setStep(1)}
+                    disabled={loading}
                     className="bg-gray-100 p-3.5 rounded-lg justify-center items-center"
                   >
                     <Feather name="arrow-left" size={20} color="#4b5563" />
@@ -190,9 +266,10 @@ export default function Register() {
 
                   {/* Tombol Submit Akhir */}
                   <Button
-                    title="Create Account"
+                    title={loading ? "Loading..." : "Create Account"}
                     className="flex-1"
-                    onPress={() => console.log("Register diklik")}
+                    disabled={loading}
+                    onPress={handleRegister}
                   />
                 </View>
               </View>

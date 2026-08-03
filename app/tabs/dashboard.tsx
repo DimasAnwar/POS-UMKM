@@ -98,7 +98,7 @@ export default function DashboardScreen() {
           <View className="w-6 bg-blue-900 rounded-t-sm h-[75%]" />
           <View className="w-6 bg-blue-900 rounded-t-sm h-[70%]" />
           <View className="w-6 bg-blue-900 rounded-t-sm h-[85%]" />
-          <View className="w-6 bg-blue-900 rounded-t-sm h-[100%]" />
+          <View className="w-6 bg-blue-900 rounded-t-sm h-full" />
           <View className="w-6 bg-blue-900 rounded-t-sm h-[90%]" />
         </View>
 
