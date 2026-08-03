@@ -3,14 +3,14 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Keyboard,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 
 import Button from "../../components/Button";
@@ -18,7 +18,7 @@ import Input from "../../components/Input";
 
 export default function Register() {
   const router = useRouter();
-  const [step, setStep] = useState(1); // State untuk mengatur Langkah 1 atau 2
+  const [step, setStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
 
   return (
@@ -73,7 +73,6 @@ export default function Register() {
               </View>
             </View>
 
-            {/* ================= STEP 1: BUSINESS INFO ================= */}
             {step === 1 && (
               <View>
                 <View className="flex-row items-center mb-4">
@@ -111,7 +110,7 @@ export default function Register() {
                   rightIcon={
                     <Feather name="chevron-down" size={20} color="#9ca3af" />
                   }
-                  editable={false} // Dimatikan sementara karena ini idealnya dropdown
+                  editable={false}
                 />
                 <Input
                   label="Business Address"
@@ -135,8 +134,6 @@ export default function Register() {
                 />
               </View>
             )}
-
-            {/* ================= STEP 2: ADMIN SETUP ================= */}
             {step === 2 && (
               <View>
                 <View className="flex-row items-center mb-4">
@@ -201,7 +198,6 @@ export default function Register() {
               </View>
             )}
 
-            {/* Divider */}
             <View className="h-1px w-full bg-gray-200 mb-6" />
 
             <View className="flex-row justify-center items-center mb-2">

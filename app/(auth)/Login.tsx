@@ -2,11 +2,11 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
 import {
-    Keyboard,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Keyboard,
+  Text,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import Button from "../../components/Button";
 import Input from "../../components/Input";
@@ -53,7 +53,7 @@ export default function Login() {
           <Button
             title="Login"
             className="mb-6"
-            onPress={() => console.log("Login diklik")}
+            onPress={() => router.push("/tabs/dashboard")}
             rightIcon={<Feather name="arrow-right" size={20} color="white" />}
           />
 
@@ -68,7 +68,6 @@ export default function Login() {
             </TouchableOpacity>
           </View>
 
-          {/* Divider Line (Typo h-1px diperbaiki jadi h-[1px]) */}
           <View className="h-1px w-full bg-gray-200 mb-6" />
 
           {/* Footer: Switch to PIN */}
