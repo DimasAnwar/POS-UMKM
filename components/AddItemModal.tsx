@@ -12,6 +12,8 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+// IMPORT LIBRARY INI UNTUK UPLOAD GAMBAR
+import { decode } from "base64-arraybuffer";
 import { supabase } from "../services/supabase";
 import Button from "./Button";
 import Input from "./Input";
@@ -43,9 +45,11 @@ export default function AddItemModal({
   const [itemName, setItemName] = useState("");
   const [itemPrice, setItemPrice] = useState("");
   const [itemStock, setItemStock] = useState("");
-  const [imageUri, setImageUri] = useState<string | null>(null);
 
-  // Generate SKU berurutan berdasarkan database
+  // STATE GAMBAR
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+
   useEffect(() => {
     if (visible) {
       fetchNextSKU(selectedCategory.prefix);
@@ -54,13 +58,11 @@ export default function AddItemModal({
 
   const fetchNextSKU = async (prefix: string) => {
     try {
-      // Ambil user yang sedang login agar pengecekan SKU spesifik untuk toko user tersebut
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Cari produk milik user dengan kategori/prefix yang sama, diurutkan dari yang terbaru
       const { data, error } = await supabase
         .from("products")
         .select("sku")
@@ -73,9 +75,7 @@ export default function AddItemModal({
       let nextNumber = 1;
 
       if (data && data.length > 0) {
-        // Ambil SKU teratas (misal: "FOOD-003")
         const latestSKU = data[0].sku;
-        // Ambil bagian angka di belakang dash (misal: "003" -> 3)
         const parts = latestSKU.split("-");
         if (parts.length > 1) {
           const lastNum = parseInt(parts[1], 10);
@@ -85,12 +85,10 @@ export default function AddItemModal({
         }
       }
 
-      // Format angka menjadi 3 digit (contoh: 1 jadi "001", 12 jadi "012")
       const formattedNum = String(nextNumber).padStart(3, "0");
       setItemSKU(`${prefix}-${formattedNum}`);
     } catch (error) {
       console.log("Gagal generate SKU:", error);
-      // Fallback jika error
       setItemSKU(`${prefix}-001`);
     }
   };
@@ -100,6 +98,7 @@ export default function AddItemModal({
     setItemPrice("");
     setItemStock("");
     setImageUri(null);
+    setImageBase64(null);
     setSelectedCategory(CATEGORIES[0]);
   };
 
@@ -113,11 +112,13 @@ export default function AddItemModal({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.5,
+      quality: 0.5, // Kompresi agar base64 tidak terlalu besar
+      base64: true, // <-- WAJIB DITAMBAHKAN
     });
 
     if (!result.canceled) {
       setImageUri(result.assets[0].uri);
+      setImageBase64(result.assets[0].base64 || null); // <-- SIMPAN DATA BASE64
     }
   };
 
@@ -159,15 +160,17 @@ export default function AddItemModal({
 
               let finalImageUrl = null;
 
-              if (imageUri) {
-                const response = await fetch(imageUri);
-                const blob = await response.blob();
+              // UPLOAD GAMBAR MENGGUNAKAN BASE64
+              if (imageBase64 && imageUri) {
                 const fileExt = imageUri.split(".").pop() || "jpg";
                 const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
+                // Decode base64 menjadi array buffer
                 const { error: uploadError } = await supabase.storage
                   .from("product-images")
-                  .upload(fileName, blob, { contentType: `image/${fileExt}` });
+                  .upload(fileName, decode(imageBase64), {
+                    contentType: `image/${fileExt}`,
+                  });
 
                 if (uploadError) throw uploadError;
 
