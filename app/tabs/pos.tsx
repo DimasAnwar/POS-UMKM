@@ -1,14 +1,17 @@
 import { Feather } from "@expo/vector-icons";
+import * as WebBrowser from "expo-web-browser";
 import React, { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import POSCard from "../../components/POSCard";
+import TransactionDetailModal from "../../components/TransactionDetailModal"; // <-- IMPORT MODAL DI SINI
 import { supabase } from "../../services/supabase";
 
 const CATEGORIES = [
@@ -27,8 +30,11 @@ type CartItem = {
 };
 
 export default function POSScreen() {
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [currentTrx, setCurrentTrx] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Items");
@@ -46,28 +52,18 @@ export default function POSScreen() {
 
       fetchProducts();
 
-      // CHANNEL REALTIME TANPA FILTER BAWAAN AGAR EVENT DELETE TIDAK TERBLOKIR
       productSubscription = supabase
         .channel(`public:products:pos_${user.id}`)
         .on(
           "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "products",
-          },
-          (payload) => {
-            console.log("Realtime POS Event:", payload);
-
+          { event: "*", schema: "public", table: "products" },
+          (payload: any) => {
             const currentUserId = user.id;
 
-            // 1. JIKA ADA BARANG DIHAPUS (DELETE): Langsung eksekusi tanpa filter user_id
             if (payload.eventType === "DELETE") {
               setProducts((prev) =>
                 prev.filter((item) => item.id !== payload.old.id),
               );
-
-              // Hapus juga dari keranjang (cart) kalau barang tersebut sedang dipilih
               setCart((prevCart) => {
                 if (prevCart[payload.old.id]) {
                   const newCart = { ...prevCart };
@@ -79,11 +75,9 @@ export default function POSScreen() {
               return;
             }
 
-            // 2. VALIDASI USER UNTUK INSERT & UPDATE
             const rowUser = payload.new?.user_id;
             if (rowUser && rowUser !== currentUserId) return;
 
-            // 3. JIKA ADA BARANG BARU (INSERT)
             if (payload.eventType === "INSERT") {
               setProducts((prev) => {
                 const isExist = prev.find((item) => item.id === payload.new.id);
@@ -92,7 +86,6 @@ export default function POSScreen() {
               });
             }
 
-            // 4. JIKA ADA BARANG DI-UPDATE (UPDATE - misal stok berubah/edit)
             if (payload.eventType === "UPDATE") {
               setProducts((prev) =>
                 prev.map((item) =>
@@ -141,7 +134,6 @@ export default function POSScreen() {
     setCart((prev) => {
       const currentQty = prev[product.id]?.quantity || 0;
       if (currentQty >= product.stock) return prev;
-
       return {
         ...prev,
         [product.id]: { product, quantity: currentQty + 1 },
@@ -152,14 +144,12 @@ export default function POSScreen() {
   const handleRemoveFromCart = (productId: string) => {
     setCart((prev) => {
       if (!prev[productId]) return prev;
-
       const currentQty = prev[productId].quantity;
       if (currentQty <= 1) {
         const newCart = { ...prev };
         delete newCart[productId];
         return newCart;
       }
-
       return {
         ...prev,
         [productId]: { ...prev[productId], quantity: currentQty - 1 },
@@ -174,7 +164,6 @@ export default function POSScreen() {
     const matchSearch =
       item.name.toLowerCase().includes(searchLower) ||
       (item.sku && item.sku.toLowerCase().includes(searchLower));
-
     return matchCategory && matchSearch;
   });
 
@@ -187,6 +176,99 @@ export default function POSScreen() {
     (sum, item) => sum + item.quantity * (item.product.price || 0),
     0,
   );
+
+  const handleCheckout = async () => {
+    if (totalItems === 0) return;
+
+    try {
+      setIsProcessing(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("User tidak ditemukan.");
+
+      const orderId = `ORDER-${Date.now()}`;
+
+      // 1. REKAM TRANSAKSI "PENDING"
+      const pendingTrx = {
+        user_id: user.id,
+        order_id: orderId,
+        total_amount: totalDue,
+        payment_method: "Midtrans QRIS",
+        status: "PENDING",
+        items: cartItemsArray.map((item) => ({
+          id: item.product.id,
+          name: item.product.name,
+          quantity: item.quantity,
+          price: item.product.price,
+        })),
+      };
+
+      const { data: insertedTrx, error: trxError } = await supabase
+        .from("transactions")
+        .insert(pendingTrx)
+        .select()
+        .single();
+
+      if (trxError) throw trxError;
+
+      // 2. MINTA LINK MIDTRANS
+      const payloadData = {
+        order_id: orderId,
+        gross_amount: totalDue,
+        items: cartItemsArray.map((item) => ({
+          id: item.product.id,
+          price: item.product.price,
+          quantity: item.quantity,
+          name: item.product.name.substring(0, 50),
+        })),
+        customer_details: {
+          first_name: "Customer",
+          email: user?.email || "customer@toko.com",
+        },
+      };
+
+      const { data, error } = await supabase.functions.invoke(
+        "midtrans-payment",
+        { body: payloadData },
+      );
+
+      if (error) throw new Error(error.message);
+
+      // 3. BUKA MIDTRANS
+      await WebBrowser.openBrowserAsync(data.redirect_url);
+
+      // 4. SETELAH BROWSER DITUTUP (OTOMATIS SUKSES & MUNCULIN STRUK)
+      setIsProcessing(true);
+
+      await supabase
+        .from("transactions")
+        .update({ status: "COMPLETED" })
+        .eq("order_id", orderId);
+
+      const stockUpdates = cartItemsArray.map(async (cartItem) => {
+        const newStock = cartItem.product.stock - cartItem.quantity;
+        await supabase
+          .from("products")
+          .update({ stock: newStock })
+          .eq("id", cartItem.product.id);
+      });
+      await Promise.all(stockUpdates);
+
+      setCurrentTrx({
+        ...pendingTrx,
+        status: "COMPLETED",
+        created_at: new Date().toISOString(),
+      });
+      setCart({});
+      setShowReceipt(true);
+    } catch (error: any) {
+      Alert.alert("Checkout Gagal", error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <View className="flex-1 bg-white">
@@ -303,15 +385,31 @@ export default function POSScreen() {
         </View>
 
         <TouchableOpacity
-          disabled={totalItems === 0}
+          disabled={totalItems === 0 || isProcessing}
+          onPress={handleCheckout}
           className={`rounded-xl py-4 flex-row justify-center items-center ${
-            totalItems === 0 ? "bg-slate-300" : "bg-blue-900"
+            totalItems === 0 || isProcessing ? "bg-slate-300" : "bg-blue-900"
           }`}
         >
-          <Text className="text-white font-bold text-lg mr-2">Charge</Text>
-          <Feather name="arrow-right" size={20} color="white" />
+          {isProcessing ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <>
+              <Text className="text-white font-bold text-lg mr-2">
+                Charge via Midtrans
+              </Text>
+              <Feather name="arrow-right" size={20} color="white" />
+            </>
+          )}
         </TouchableOpacity>
       </View>
+
+      {/* MODAL STRUK DITARO DI SINI */}
+      <TransactionDetailModal
+        visible={showReceipt}
+        onClose={() => setShowReceipt(false)}
+        transaction={currentTrx}
+      />
     </View>
   );
 }
